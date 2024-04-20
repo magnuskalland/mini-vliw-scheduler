@@ -4,7 +4,7 @@ import Microarchitecture.Microarchitecture;
 
 import java.util.ArrayList;
 
-class Bundle {
+public class Bundle {
     private final ArrayList<Instruction> bundle;
     private final int address;
     Bundle(int pc) {

@@ -1,8 +1,9 @@
-import Instructions.Branch;
-import Instructions.Instruction;
+import Instructions.*;
+import Microarchitecture.Microarchitecture;
 
 import java.util.ArrayList;
-import java.util.OptionalInt;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class Schedule {
     private final ArrayList<Instruction> program;
@@ -28,10 +29,6 @@ public abstract class Schedule {
     }
 
     protected void insert(Instruction instruction, InstructionDependency deps, int initiationInterval) {
-        int i;
-        boolean ok;
-        Bundle bundle;
-
         // Set loop start to the current size
         if (instruction.getAddress() == initialLoopStart)
             defineLoopStart();
@@ -44,22 +41,68 @@ public abstract class Schedule {
             return;
         }
 
-        i = getEarliestSlot(instruction, deps);
+        int lowerBound = getEarliestSlot(instruction, deps);
+        insertFromLowerBound(instruction, lowerBound, false);
+    }
+
+    protected void insert(Mov mov) {
+        int lowerBound = computeInterloopDependencyMovLowerBoundSlot(mov);
+        insertFromLowerBound(mov, lowerBound, true);
+    }
+
+    protected void moveLoopToEnd() {
+        int loopSlot = Microarchitecture.BR_SLOTS[0];
+        for (Bundle b : bundles)
+            for (Instruction i : b.get())
+                if (i instanceof Branch) {
+                    b.get().set(loopSlot, new Nop(b.getAddress(), loopSlot));
+                    bundles.get(loopEnd-1).insertIntoSlot(i);
+                    return;
+                }
+        assert false;
+    }
+
+    private void insertFromLowerBound(Instruction instruction, int earliest, boolean insertingInterloopMov) {
+        Bundle bundle;
+        boolean ok;
+        int index = earliest;
         do {
-            while (i >= bundles.size())
+            while (index >= bundles.size()) {
                 addBundle();
-            bundle = bundles.get(i++);
+            }
+
+            if (insertingInterloopMov && index == loopEnd) {
+                insertBubbleBundle(loopEnd++);
+            }
+
+            bundle = bundles.get(index++);
             ok = bundle.insertIntoSlot(instruction);
             if (ok) {
                 return;
             }
         } while (true);
     }
+
+    private int computeInterloopDependencyMovLowerBoundSlot(Mov mov) {
+        AtomicInteger earliest = new AtomicInteger(loopEnd - 1);
+        bundles.subList(loopStart, loopEnd).forEach(b ->
+                b.get().forEach(i -> {
+                    if (!(i instanceof Producer)) {
+                        return;
+                    }
+                    if (((Producer) i).getMappedDestination() == mov.getMappedOperandA()) {
+                        if (earliest.get() < i.getScheduledAddress() + i.getLatency()) {
+                            earliest.set(i.getScheduledAddress() + i.getLatency());
+                        }
+                    }
+                }));
+        return earliest.get();
+    }
+
     private void addBundle() {
         insertBubbleBundle(bundles.size());
     }
     private void insertBubbleBundle(int index) {
-        // TODO: update loopStart and loopEnd
         bundles.add(index, new Bundle(index));
     }
 

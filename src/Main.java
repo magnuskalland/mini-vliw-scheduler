@@ -1,8 +1,3 @@
-// bash build.sh && bash run.sh given_tests/01/input.json given_tests/01/user_output.json
-
-// Test all:
-// sudo bash runall.sh && sudo bash testall.sh
-
 import Instructions.Instruction;
 
 import java.util.ArrayList;

@@ -2,6 +2,7 @@ import Instructions.*;
 import Microarchitecture.Microarchitecture;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class RegisterAllocator {
@@ -70,6 +71,8 @@ public class RegisterAllocator {
                         Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Mov::toString))),
                         ArrayList::new
                 ));
+        distinct.forEach(d -> sched.insert(d));
+        sched.moveLoopToEnd();
     }
 
     private int getDependencySourceRegister(Consumer c, Producer p) {
