@@ -22,4 +22,6 @@ public class Mulu extends Multiplicative {
     public int getLatency() {
         return 3;
     }
+
+
 }

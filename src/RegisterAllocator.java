@@ -19,6 +19,7 @@ public class RegisterAllocator {
         alloc.handleInterloopDependencies();
         System.out.printf("Handled interloop dependencies:\n%s\n", sched);
         alloc.allocateEarlierReaders();
+        System.out.printf("Handled earlier readers:\n%s\n", sched);
     }
 
     private void allocateFresh() {
@@ -64,6 +65,7 @@ public class RegisterAllocator {
                             int dest = getDependencySourceRegister((Consumer)i, d);
                             int cons = d.getMappedDestination();
                             Mov mov = new Mov(sched.getLoopEnd()-1, dest, cons);
+                            mov.setOperandA(cons); // mark operand as remapped
                             movs.add(mov);
                         }));
         ArrayList<Mov> distinct = movs.stream()
@@ -82,7 +84,21 @@ public class RegisterAllocator {
     }
 
     private void allocateEarlierReaders() {
+        sched.get().forEach(b ->
+                b.get().stream()
+                        .filter(Instruction::isTrueConsumer)
+                        .forEach(i -> {
+                                if (!((Consumer)i).isOperandARemapped()) {
+                                    ((Consumer) i).setOperandA(Microarchitecture.getFreshSimpleRegister());
+                                }
+                                if (!(i instanceof DoubleConsumer))
+                                    return;
 
+                                if (!((DoubleConsumer)i).isOperandBRemapped()) {
+                                    ((DoubleConsumer) i).setOperandB(Microarchitecture.getFreshSimpleRegister());
+                                }
+                        })
+        );
     }
 
     private RegisterAllocator(ArrayList<Instruction> program, Schedule sched, ArrayList<InstructionDependency> deps) {

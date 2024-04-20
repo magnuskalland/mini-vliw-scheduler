@@ -17,7 +17,7 @@ public class Movi extends Arithmetic implements Immediate {
     @Override
     public String toString() {
         return String.format("%s mov x%d, %s",
-                getPredicateString(), getMappedDestination(), getImmediate());
+                getPredicateString(), getMappedDestination(), getMappedOperandA());
     }
 
     @Override

@@ -6,6 +6,7 @@ public class St extends Consumer implements Predicateable, Memory, DoubleConsume
     private final int offset;
     private final int operandB;
     private int mappedOperandB;
+    private boolean operandBRemapped;
     protected Integer predicate = null;
 
     public St(int address, int consumed, int offset, int memoryDestination) {
@@ -13,6 +14,7 @@ public class St extends Consumer implements Predicateable, Memory, DoubleConsume
         this.offset = offset;
         this.operandB = memoryDestination;
         this.mappedOperandB = operandB;
+        this.operandBRemapped = false;
     }
 
     @Override
@@ -37,10 +39,15 @@ public class St extends Consumer implements Predicateable, Memory, DoubleConsume
     @Override
     public void setOperandB(int operand) {
         this.mappedOperandB = operand;
+        this.operandBRemapped = true;
     }
     @Override
     public int getMappedOperandB() {
         return mappedOperandB;
+    }
+    @Override
+    public boolean isOperandBRemapped() {
+        return operandBRemapped;
     }
     @Override
     public int getOffset() {
