@@ -9,6 +9,7 @@ public abstract class Schedule {
     private final ArrayList<Bundle> bundles;
     private final Instruction loopStart;
     private final Instruction loopEnd;
+    private boolean loopEndAdded;
     private final int initiationInterval;
     Schedule(ArrayList<Instruction> program, Instruction loopStart, Instruction loopEnd, int initiationInterval) {
         this.program = program;
@@ -16,6 +17,7 @@ public abstract class Schedule {
         this.loopEnd = loopEnd;
         this.initiationInterval = initiationInterval;
         bundles = new ArrayList<>();
+        loopEndAdded = false;
     }
 
     protected ArrayList<Bundle> get() {
@@ -26,9 +28,9 @@ public abstract class Schedule {
         // If instruction is the branch instruction, insert into a special spot
         if (instruction instanceof Branch) {
             ((Branch) instruction).setTarget(getLoopStart());
-            while (bundles.size() <= getLoopStart() + initiationInterval)
+            while (bundles.size() < getLoopStart() + initiationInterval)
                 addBundle();
-            bundles.get(getLoopStart() + initiationInterval).insertIntoSlot(instruction);
+            bundles.get(getLoopStart() + initiationInterval - 1).insertIntoSlot(instruction);
             return;
         }
 
@@ -58,7 +60,7 @@ public abstract class Schedule {
     }
 
     protected int getLoopStart() {
-        return loopStart == null ? bundles.size() : loopStart.getScheduledAddress();
+        return loopStart == null ? bundles.size(): loopStart.getScheduledAddress();
     }
 
     protected int getLoopEnd() {
@@ -69,6 +71,10 @@ public abstract class Schedule {
         Bundle bundle;
         boolean ok;
         int index = earliest;
+
+        if (instruction == loopEnd) {
+            loopEndAdded = true;
+        }
 
         do {
             while (index >= bundles.size()) {
@@ -91,7 +97,7 @@ public abstract class Schedule {
 
     private int computeInterloopDependencyMovLowerBoundSlot(Mov mov) {
         AtomicInteger earliest = new AtomicInteger(getLoopEnd() - 1);
-        bundles.subList(getLoopStart(), getLoopEnd()).forEach(b ->
+        bundles.subList(getLoopStart(), Math.min(getLoopEnd(), bundles.size())).forEach(b ->
                 b.get().forEach(i -> {
                     if (!(i instanceof Producer)) {
                         return;
@@ -114,19 +120,17 @@ public abstract class Schedule {
     }
 
     private int getEarliestSlot(Instruction instruction, InstructionDependency dependencies) {
-        int lb = (instruction == loopStart || instruction == loopEnd) ? bundles.size() :
+        int lowerBound = (instruction == loopStart || instruction == loopEnd) ? bundles.size() :
                 (instruction.getAddress() < getLoopStart()) ? 0 :
-                (instruction.getAddress() < getLoopEnd()) ? getLoopStart() :
+                (instruction.getAddress() <= getLoopEnd() || !loopEndAdded) ? getLoopStart() :
                         getLoopEnd();
-
-        int dependencyDelay = dependencies.getAll().stream()
+        int latestDependency = dependencies.getAll().stream()
                 .filter(d -> instruction.getAddress() > d.getAddress() &&
-                        lb < d.getAddress() + d.getLatency())
+                        lowerBound < d.getAddress() + d.getLatency())
                 .mapToInt(d -> d.getScheduledAddress() + d.getLatency())
                 .max()
                 .orElse(0);
-
-        return Math.max(dependencyDelay, lb);
+        return Math.max(latestDependency, lowerBound);
     }
 
     @Override

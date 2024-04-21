@@ -62,7 +62,7 @@ public class RegisterAllocator {
                         .forEach(d -> {
                             int dest = getDependencySourceRegister((Consumer)i, d);
                             int cons = d.getMappedDestination();
-                            Mov mov = new Mov(sched.getLoopEnd()-1, dest, cons);
+                            Mov mov = new Mov(Math.min(sched.get().size()-1, sched.getLoopEnd()-1), dest, cons);
                             mov.setOperandA(cons); // mark operand as remapped
                             movs.add(mov);
                         }));
