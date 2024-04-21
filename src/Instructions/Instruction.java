@@ -22,4 +22,13 @@ public abstract class Instruction {
     public boolean isTrueConsumer() {
         return this instanceof Consumer && !(this instanceof Movi);
     }
+    protected int parseImmediate(String imm) {
+        int asInt;
+        try {
+            asInt = Integer.parseInt(imm);
+        } catch (NumberFormatException e) {
+            asInt = Integer.parseInt(imm.substring(2), 16);
+        }
+        return asInt;
+    }
 }

@@ -6,13 +6,7 @@ public class Movi extends Arithmetic implements Immediate {
     public Movi(int address, int destination, String immediate) {
         super(address, destination, -1);
         this.immediate = immediate;
-        int immediateAsInteger;
-        try {
-            immediateAsInteger = Integer.parseInt(immediate);
-        } catch (NumberFormatException e) {
-            immediateAsInteger = Integer.parseInt(immediate.substring(2), 16);
-        }
-        setOperandA(immediateAsInteger);
+        setOperandA(parseImmediate(immediate));
     }
     @Override
     public String toString() {

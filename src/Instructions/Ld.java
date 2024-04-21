@@ -4,9 +4,9 @@ import Microarchitecture.Microarchitecture;
 
 public class Ld extends Producer implements Memory {
     private final int offset;
-    public Ld(int address, int destination, int offset, int consumed) {
+    public Ld(int address, int destination, String offset, int consumed) {
         super(address, destination, consumed);
-        this.offset = offset;
+        this.offset = parseImmediate(offset);
     }
 
     @Override

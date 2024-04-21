@@ -9,9 +9,9 @@ public class St extends Consumer implements Predicateable, Memory, DoubleConsume
     private boolean operandBRemapped;
     protected Integer predicate = null;
 
-    public St(int address, int consumed, int offset, int memoryDestination) {
+    public St(int address, int consumed, String offset, int memoryDestination) {
         super(address, consumed);
-        this.offset = offset;
+        this.offset = parseImmediate(offset);
         this.operandB = memoryDestination;
         this.mappedOperandB = operandB;
         this.operandBRemapped = false;

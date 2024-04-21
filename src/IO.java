@@ -73,20 +73,29 @@ public class IO {
 
         if (vec[0].equals("mov")) {
             return vec[1].charAt(0) == 'p' ?
-                    // Move predicate
-                    new MovP(index, Integer.parseInt(vec[1]), vec[2].replaceFirst("p", ""))
+                        // Move predicate
+                        new MovP(index, Integer.parseInt(vec[1]), vec[2].replaceFirst("p", ""))
                     : vec[1].equals("LC") || vec[1].equals("EC") ?
-                    // Move loop
-                    new MovLoop(index, vec[1], Integer.parseInt(vec[2]))
+                        // Move loop
+                        new MovLoop(index, vec[1], Integer.parseInt(vec[2]))
                     : vec[2].charAt(0) == 'x' ?
-                    // Move
-                    new Mov(index, Integer.parseInt(vec[1]), Integer.parseInt(vec[2].replaceFirst("x", "")))
+                        // Move
+                        new Mov(index, Integer.parseInt(vec[1]), Integer.parseInt(vec[2].replaceFirst("x", "")))
                     // Move immediate
                     : new Movi(index, Integer.parseInt(vec[1]), vec[2]);
         }
 
-        if (vec[0].equals("addi"))
+        if (vec[0].equals("addi")) {
             return new Addi(index, Integer.parseInt(vec[1]), Integer.parseInt(vec[2].replaceFirst("x", "")), vec[3]);
+        }
+        if (vec[0].equals("st")) {
+            String[] mem = vec[2].replace("(", " ").replace(")", "").split(" ");
+            return new St(index, Integer.parseInt(vec[1]), mem[0], Integer.parseInt(mem[1].replaceFirst("x", "")));
+        }
+        if (vec[0].equals("ld")) {
+            String[] mem = vec[2].replace("(", " ").replace(")", "").split(" ");
+            return new Ld(index, Integer.parseInt(vec[1]), mem[0], Integer.parseInt(mem[1].replaceFirst("x", "")));
+        }
 
         // No immediates left at this point, so we can safely remove the register prefix 'x'
 
@@ -96,14 +105,6 @@ public class IO {
             case "sub" -> new Sub(index, Integer.parseInt(vec[1]), Integer.parseInt(vec[2]), Integer.parseInt(vec[3]));
             case "mulu" ->
                     new Mulu(index, Integer.parseInt(vec[1]), Integer.parseInt(vec[2]), Integer.parseInt(vec[3]));
-            case "ld" -> {
-                String[] mem = vec[2].replace("(", " ").replace(")", "").split(" ");
-                yield new Ld(index, Integer.parseInt(vec[1]), Integer.parseInt(mem[0]), Integer.parseInt(mem[1]));
-            }
-            case "st" -> {
-                String[] mem = vec[2].replace("(", " ").replace(")", "").split(" ");
-                yield new St(index, Integer.parseInt(vec[1]), Integer.parseInt(mem[0]), Integer.parseInt(mem[1]));
-            }
             case "loop" -> new Loop(index, Integer.parseInt(vec[1]));
             case "loop.pip" -> new LoopPip(index, Integer.parseInt(vec[1]));
             case "nop" -> new Nop(index, -1);
