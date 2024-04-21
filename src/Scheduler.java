@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class Scheduler {
-    private int initialLoopStart, initialLoopEnd;
+    private Instruction loopStart, loopEnd;
     int initiationInterval, loopStages;
     ArrayList<Instruction> program;
 
@@ -16,12 +16,12 @@ public class Scheduler {
         ArrayList<InstructionDependency> dependencies;
 
         scheduler.program = instructions;
-        scheduler.defineInitialBasicBlocks();
+        scheduler.defineBasicBlocks();
         scheduler.initiationInterval = scheduler.computeInitiationIntervalLowerBound();
         System.out.printf("%s\n", scheduler.getInitialProgram());
 
         while (true) {
-            dependencies = DependencyAnalyzer.analyze(instructions, scheduler.initialLoopStart, scheduler.initialLoopEnd,
+            dependencies = DependencyAnalyzer.analyze(instructions, scheduler.getLoopStartAddress(), scheduler.getLoopEndAddress(),
                     scheduler.getBasicBlockZeroProducers(),
                     scheduler.getBasicBlockOneProducers(),
                     scheduler.getBasicBlockTwoProducers());
@@ -39,13 +39,13 @@ public class Scheduler {
     }
 
     public Schedule schedulePipelined(ArrayList<Instruction> program, ArrayList<InstructionDependency> dependencies) {
-        Schedule schedule = new PipelinedSchedule(program, initiationInterval);
+        Schedule schedule = new PipelinedSchedule(program, loopStart, loopEnd, initiationInterval);
 
         return schedule;
     }
 
     public Schedule scheduleSequential(ArrayList<Instruction> program, ArrayList<InstructionDependency> dependencies) {
-        Schedule schedule = new SequentialSchedule(program, initiationInterval, initialLoopStart);
+        Schedule schedule = new SequentialSchedule(program, loopStart, loopEnd, initiationInterval);
 
         for (Instruction i : getBasicBlockZero()) {
             schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
@@ -59,23 +59,30 @@ public class Scheduler {
             schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
         }
 
+        System.out.println("Initial schedule:");
         System.out.printf("%s\n", schedule);
         return schedule;
     }
 
     private int computeInitiationIntervalLowerBound() {
         int[] counts = new int[Microarchitecture.PIPELINE_WIDTH];
-        program.subList(initialLoopStart, initialLoopEnd).forEach(i -> counts[i.getPipelineSlots()[0]]++);
+        program.subList(loopStart.getAddress(), getLoopEndAddress())
+                .forEach(i -> counts[i.getPipelineSlots()[0]]++);
         counts[0] = (int) Math.ceil((double) counts[0] / Microarchitecture.ALU_UNITS);
         return Arrays.stream(counts).max().getAsInt();
     }
 
-    private void defineInitialBasicBlocks() {
-        Optional<Instruction> loop = program.stream()
+    private void defineBasicBlocks() {
+        Branch branch = (Branch) program.stream()
                 .filter(instruction -> instruction instanceof Branch)
-                .findFirst();
-        initialLoopStart = loop.map(instruction -> ((Branch) instruction).getTarget()).orElse(program.size());
-        initialLoopEnd = loop.map(instruction -> instruction.getAddress() + 1).orElse(program.size());
+                .findFirst().orElse(null);
+        loopStart = branch == null ? null : program.get(branch.getTarget());
+        try {
+            loopEnd = branch == null ? null : program.get(branch.getAddress() + 1);
+        } catch (IndexOutOfBoundsException e) {
+            loopEnd = null;
+        }
+        System.out.printf("Loop start is %s and end is %s\n", loopStart, loopEnd);
     }
 
     private boolean verifyInterloopDependencyInvariant(ArrayList<InstructionDependency> dependencies) {
@@ -99,8 +106,8 @@ public class Scheduler {
         String programString = program.stream()
                 .map(instr -> {
                     int index = i.getAndIncrement();
-                    return (index == initialLoopStart ? "BB1:" : "") +
-                            (index == initialLoopEnd ? "BB2:" : "") +
+                    return (index == loopStart.getAddress() ? "BB1:" : "") +
+                            (index ==getLoopEndAddress() ? "BB2:" : "") +
                             String.format("\t0x%x: %s\n", index, instr);
                 })
                 .collect(Collectors.joining());
@@ -108,18 +115,18 @@ public class Scheduler {
         return "BB0:" + programString + String.format("Initial II: %d\n", computeInitiationIntervalLowerBound());
     }
     private ArrayList<Instruction> getBasicBlockZero() {
-        return program.stream().filter(i -> i.getAddress() < initialLoopStart)
+        return program.stream().filter(i -> i.getAddress() < loopStart.getAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private ArrayList<Instruction> getBasicBlockOne() {
-        return program.stream().filter(i -> i.getAddress() >= initialLoopStart
-                    && i.getAddress() < initialLoopEnd)
+        return program.stream().filter(i -> i.getAddress() >= loopStart.getAddress() &&
+                    i.getAddress() < getLoopEndAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private ArrayList<Instruction> getBasicBlockTwo() {
-        return program.stream().filter(i -> i.getAddress() >= initialLoopEnd)
+        return program.stream().filter(i -> i.getAddress() >= getLoopEndAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -140,5 +147,13 @@ public class Scheduler {
 
     private ArrayList<Producer> getBasicBlockTwoProducers() {
         return getProducersFromBasicBlock(getBasicBlockTwo());
+    }
+
+    private int getLoopStartAddress() {
+        return loopStart == null ? program.size() : loopStart.getAddress();
+    }
+
+    private int getLoopEndAddress() {
+        return loopEnd == null ? program.size() : loopEnd.getAddress();
     }
 }

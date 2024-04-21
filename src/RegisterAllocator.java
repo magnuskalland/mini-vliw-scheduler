@@ -2,18 +2,16 @@ import Instructions.*;
 import Microarchitecture.Microarchitecture;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class RegisterAllocator {
-    private ArrayList<Instruction> program;
-    private Schedule sched;
-    private ArrayList<InstructionDependency> deps;
-    private HashMap<Integer, Integer> map;
+    private final ArrayList<Instruction> program;
+    private final Schedule sched;
+    private final ArrayList<InstructionDependency> deps;
     static void allocate(ArrayList<Instruction> program, Schedule sched, ArrayList<InstructionDependency> deps) {
         RegisterAllocator alloc = new RegisterAllocator(program, sched, deps);
         alloc.allocateFresh();
-        System.out.printf("Allocated fresh registers:\n%s\n", sched);
+        System.out.printf("Allocated fresh produced registers:\n%s\n", sched);
         alloc.mapConsumed();
         System.out.printf("Mapped consumed registers:\n%s\n", sched);
         alloc.handleInterloopDependencies();
@@ -33,26 +31,26 @@ public class RegisterAllocator {
     private void mapConsumed() {
         sched.get().forEach(b ->
                 b.get().stream().filter(Instruction::isTrueConsumer).forEach(c -> {
-                    Producer producer = getProducer(c.getAddress(), ((Consumer) c).getOperandA());
+                    Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
                     ((Consumer) c).setOperandA(producer.getMappedDestination());
 
                     if (!(c instanceof DoubleConsumer))
                         return;
 
-                    producer = getProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
+                    producer = getMostRecentProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
                     ((DoubleConsumer) c).setOperandB(producer.getMappedDestination());
 
                 }));
     }
 
-    private Producer getProducer(int consumerAddress, int register) {
+    private Producer getMostRecentProducer(int consumerAddress, int register) {
         ArrayList<Producer> producers = deps.get(consumerAddress).getAll().stream()
                 .filter(p -> p.getDestination() == register)
                 .sorted(Comparator.comparingInt(p -> {
                     int diff = consumerAddress - p.getAddress();
-                    return diff < 0 ? Integer.MIN_VALUE : diff;
-                })).collect(Collectors.toCollection(ArrayList::new));
-        Collections.reverse(producers);
+                    return diff <= 0 ? Integer.MAX_VALUE : diff;
+                }))
+                .collect(Collectors.toCollection(ArrayList::new));
         return producers.get(0);
     }
 
@@ -73,7 +71,7 @@ public class RegisterAllocator {
                         Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Mov::toString))),
                         ArrayList::new
                 ));
-        distinct.forEach(d -> sched.insert(d));
+        distinct.forEach(sched::insert);
         sched.moveLoopToEnd();
     }
 
@@ -105,6 +103,5 @@ public class RegisterAllocator {
         this.program = program;
         this.sched = sched;
         this.deps = deps;
-        this.map = new HashMap<>();
     }
 }

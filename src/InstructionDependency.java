@@ -69,8 +69,7 @@ public class InstructionDependency {
                 deps.isEmpty() ? "" : Arrays.toString(deps.stream()
                         .map(i -> String.format("(%d, x%d)", i.getAddress(), i.getDestination()))
                         .toArray());
-
-        return String.format("%-2d | %20s | %20s | %20s | %20s", address,
+        return String.format("%-2d | %30s | %30s | %30s | %30s", address,
                 formatDependencies.apply(localDependencies),
                 formatDependencies.apply(interloopDependencies),
                 formatDependencies.apply(loopInvariantDependencies),

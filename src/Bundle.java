@@ -4,25 +4,28 @@ import Microarchitecture.Microarchitecture;
 
 import java.util.ArrayList;
 
-public class Bundle {
+class Bundle {
     private final ArrayList<Instruction> bundle;
-    private final int address;
-    Bundle(int pc) {
+    private int address;
+    public Bundle(int pc) {
         this.address = pc;
         bundle = new ArrayList<>(Microarchitecture.PIPELINE_WIDTH);
         for (int i = 0; i < Microarchitecture.PIPELINE_WIDTH; i++)
             bundle.add(new Nop(pc, i));
     }
 
-    ArrayList<Instruction> get() {
+    protected ArrayList<Instruction> get() {
         return bundle;
     }
 
-    int getAddress() {
+    protected int getAddress() {
         return address;
     }
+    protected void setAddress(int address) {
+        this.address = address;
+    }
 
-    boolean insertIntoSlot(Instruction instruction) {
+    protected boolean insertIntoSlot(Instruction instruction) {
         for (Integer i : instruction.getPipelineSlots()) {
             if (bundle.get(i) instanceof Nop && !((Nop)bundle.get(i)).isReserved()) {
                 instruction.setScheduledAddress(address);

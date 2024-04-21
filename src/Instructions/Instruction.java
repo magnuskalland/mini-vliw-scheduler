@@ -5,6 +5,7 @@ public abstract class Instruction {
     private int scheduledAddress;
     Instruction(int address) {
         this.address = address;
+        this.scheduledAddress = address;
     }
     public int getAddress() {
         return address;
