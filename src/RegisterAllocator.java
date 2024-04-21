@@ -14,8 +14,11 @@ public class RegisterAllocator {
         System.out.printf("Allocated fresh produced registers:\n%s\n", sched);
         alloc.mapConsumed();
         System.out.printf("Mapped consumed registers:\n%s\n", sched);
-        alloc.handleInterloopDependencies();
-        System.out.printf("Handled interloop dependencies:\n%s\n", sched);
+        if (sched.containsLoop()) {
+            alloc.handleInterloopDependencies();
+            System.out.printf("Handled interloop dependencies:\n%s\n", sched);
+        }
+
         alloc.allocateEarlierReaders();
         System.out.printf("Handled earlier readers:\n%s\n", sched);
     }
@@ -30,16 +33,22 @@ public class RegisterAllocator {
 
     private void mapConsumed() {
         sched.get().forEach(b ->
-                b.get().stream().filter(Instruction::isTrueConsumer).forEach(c -> {
-                    Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
-                    ((Consumer) c).setOperandA(producer.getMappedDestination());
+                b.get().stream()
+                        .filter(i -> i.isTrueConsumer() && !deps.get(i.getAddress()).getAll().isEmpty())
+                        .forEach(c -> {
+
+                    if (deps.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((Consumer) c).getOperandA())) {
+                        Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
+                        ((Consumer) c).setOperandA(producer.getMappedDestination());
+                    }
 
                     if (!(c instanceof DoubleConsumer))
                         return;
 
-                    producer = getMostRecentProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
-                    ((DoubleConsumer) c).setOperandB(producer.getMappedDestination());
-
+                    if (deps.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((DoubleConsumer) c).getOperandB())) {
+                        Producer producer = getMostRecentProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
+                        ((DoubleConsumer) c).setOperandB(producer.getMappedDestination());
+                    }
                 }));
     }
 

@@ -21,7 +21,7 @@ public class Main {
         Schedule simple = Scheduler.schedule(instructions, false);
         IO.dump(simple, simpleOutput);
 
-//        Schedule pipelined = Scheduler.schedule(instructions, true);
-//        IO.dump(pipelined, pipOutput);
+        Schedule pipelined = Scheduler.schedule(instructions, true);
+        IO.dump(pipelined, pipOutput);
     }
 }

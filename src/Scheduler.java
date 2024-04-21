@@ -40,22 +40,16 @@ public class Scheduler {
 
     public Schedule schedulePipelined(ArrayList<Instruction> program, ArrayList<InstructionDependency> dependencies) {
         Schedule schedule = new PipelinedSchedule(program, loopStart, loopEnd, initiationInterval);
-
+        for (Instruction i : getBasicBlockZero()) {
+            schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
+        }
         return schedule;
     }
 
     public Schedule scheduleSequential(ArrayList<Instruction> program, ArrayList<InstructionDependency> dependencies) {
         Schedule schedule = new SequentialSchedule(program, loopStart, loopEnd, initiationInterval);
 
-        for (Instruction i : getBasicBlockZero()) {
-            schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
-        }
-
-        for (Instruction i : getBasicBlockOne()) {
-            schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
-        }
-
-        for (Instruction i : getBasicBlockTwo()) {
+        for (Instruction i : program) {
             schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
         }
 
@@ -66,7 +60,7 @@ public class Scheduler {
 
     private int computeInitiationIntervalLowerBound() {
         int[] counts = new int[Microarchitecture.PIPELINE_WIDTH];
-        program.subList(loopStart.getAddress(), getLoopEndAddress())
+        program.subList(getLoopStartAddress(), getLoopEndAddress())
                 .forEach(i -> counts[i.getPipelineSlots()[0]]++);
         counts[0] = (int) Math.ceil((double) counts[0] / Microarchitecture.ALU_UNITS);
         return Arrays.stream(counts).max().getAsInt();
@@ -106,8 +100,8 @@ public class Scheduler {
         String programString = program.stream()
                 .map(instr -> {
                     int index = i.getAndIncrement();
-                    return (index == loopStart.getAddress() ? "BB1:" : "") +
-                            (index ==getLoopEndAddress() ? "BB2:" : "") +
+                    return (index == getLoopStartAddress() ? "BB1:" : "") +
+                            (index == getLoopEndAddress() ? "BB2:" : "") +
                             String.format("\t0x%x: %s\n", index, instr);
                 })
                 .collect(Collectors.joining());
@@ -115,12 +109,12 @@ public class Scheduler {
         return "BB0:" + programString + String.format("Initial II: %d\n", computeInitiationIntervalLowerBound());
     }
     private ArrayList<Instruction> getBasicBlockZero() {
-        return program.stream().filter(i -> i.getAddress() < loopStart.getAddress())
+        return program.stream().filter(i -> i.getAddress() < getLoopStartAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private ArrayList<Instruction> getBasicBlockOne() {
-        return program.stream().filter(i -> i.getAddress() >= loopStart.getAddress() &&
+        return program.stream().filter(i -> i.getAddress() >= getLoopStartAddress() &&
                     i.getAddress() < getLoopEndAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }

@@ -120,7 +120,9 @@ public abstract class Schedule {
     }
 
     private int getEarliestSlot(Instruction instruction, InstructionDependency dependencies) {
-        int lowerBound = (instruction == loopStart || instruction == loopEnd) ? bundles.size() :
+        int lowerBound =
+                (!containsLoop()) ? 0 :
+                (instruction == loopStart || instruction == loopEnd) ? bundles.size() :
                 (instruction.getAddress() < getLoopStart()) ? 0 :
                 (instruction.getAddress() <= getLoopEnd() || !loopEndAdded) ? getLoopStart() :
                         getLoopEnd();
