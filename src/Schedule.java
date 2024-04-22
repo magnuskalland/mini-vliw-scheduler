@@ -3,7 +3,10 @@ import Microarchitecture.Microarchitecture;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.TreeSet;
 import java.util.function.BiFunction;
+import java.util.stream.Collectors;
 
 public abstract class Schedule {
     protected ArrayList<Bundle> bundles;
@@ -13,9 +16,11 @@ public abstract class Schedule {
     protected final ArrayList<InstructionDependency> dependencyMatrix;
     protected int initiationInterval;
     protected boolean loopEndAdded;
+    protected Branch branchInstruction;
 
     public abstract void allocateRegisters();
     protected abstract boolean insertionLoop(Instruction instruction, int index);
+    public abstract void prepareLoop();
 
     public void scheduleInstruction(Instruction instruction) {
         // If instruction is the branch instruction, insert into a special spot
@@ -80,7 +85,15 @@ public abstract class Schedule {
     }
 
     protected void insertBubbleBundle(int index) {
-        bundles.subList(index, bundles.size()).forEach(b -> b.setAddress(b.getAddress()+1));
+        if (index <= getLoopStartAddress() && branchInstruction != null) {
+            branchInstruction.setTarget(branchInstruction.getTarget() + 1);
+        }
+
+        bundles.subList(index, bundles.size()).forEach(b -> {
+            int newAddress = b.getAddress() + 1;
+            b.getBundle().forEach(i -> i.setScheduledAddress(newAddress));
+            b.setAddress(newAddress);
+        });
         bundles.add(index, new Bundle(index));
     }
 
@@ -91,7 +104,12 @@ public abstract class Schedule {
         while (bundles.size() < getLoopStartAddress() + initiationInterval) {
             addBundle();
         }
-        bundles.get(getLoopStartAddress() + initiationInterval - 1).insertIntoSlot(loop);
+
+        branchInstruction = loop;
+        program.set(branch.getAddress(), loop);
+        int address = getLoopStartAddress() + initiationInterval - 1;
+        loop.setScheduledAddress(address);
+        bundles.get(address).insertIntoSlot(loop);
     }
 
     protected void pushDownLoopEnd() {
@@ -134,6 +152,68 @@ public abstract class Schedule {
                 .max()
                 .orElse(0);
         return Math.max(latestDependency, lowerBound);
+    }
+
+    protected void allocateEarlierReaders() {
+        bundles.forEach(b ->
+                b.getBundle().stream()
+                        .filter(Instruction::isTrueConsumer)
+                        .forEach(i -> {
+                            if (!((Consumer)i).isOperandARemapped()) {
+                                ((Consumer) i).setOperandA(Microarchitecture.getFreshSimpleRegister());
+                            }
+                            if (!(i instanceof DoubleConsumer))
+                                return;
+
+                            if (!((DoubleConsumer)i).isOperandBRemapped()) {
+                                ((DoubleConsumer) i).setOperandB(Microarchitecture.getFreshSimpleRegister());
+                            }
+                        })
+        );
+    }
+
+    protected ArrayList<Producer> getDistinctInterloopDependencies() {
+        ArrayList<Producer> interloopDeps = new ArrayList<>();
+        dependencyMatrix
+                .subList(getLoopStartAddress(), getLoopEndAddress())
+                .forEach(d -> d.getInterloopDependencies().stream()
+                        .filter(p -> p.getScheduledAddress() < getLoopStartAddress())
+                        .forEach(interloopDeps::add));
+        return interloopDeps.stream().collect(Collectors.collectingAndThen(
+                Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Instruction::toString))),
+                ArrayList::new));
+    }
+
+    protected void mapConsumed(ArrayList<Bundle> bundles) {
+        bundles.forEach(b ->
+                b.getBundle().stream()
+                        .filter(i -> i.isTrueConsumer() && !dependencyMatrix.get(i.getAddress()).getAll().isEmpty())
+                        .forEach(c -> {
+
+                            if (dependencyMatrix.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((Consumer) c).getOperandA())) {
+                                Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
+                                ((Consumer) c).setOperandA(producer.getMappedDestination());
+                            }
+
+                            if (!(c instanceof DoubleConsumer))
+                                return;
+
+                            if (dependencyMatrix.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((DoubleConsumer) c).getOperandB())) {
+                                Producer producer = getMostRecentProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
+                                ((DoubleConsumer) c).setOperandB(producer.getMappedDestination());
+                            }
+                        }));
+    }
+
+    protected Producer getMostRecentProducer(int consumerAddress, int register) {
+        ArrayList<Producer> producers = dependencyMatrix.get(consumerAddress).getAll().stream()
+                .filter(p -> p.getDestination() == register)
+                .sorted(Comparator.comparingInt(p -> {
+                    int diff = consumerAddress - p.getAddress();
+                    return diff <= 0 ? Integer.MAX_VALUE : diff;
+                }))
+                .collect(Collectors.toCollection(ArrayList::new));
+        return producers.get(0);
     }
 
     @Override

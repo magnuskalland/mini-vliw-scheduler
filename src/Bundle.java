@@ -43,7 +43,7 @@ public class Bundle {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         for (Instruction i : bundle)
-            sb.append(String.format(" | %-20s", i.toString()));
+            sb.append(String.format(" | %-25s", i.toString()));
         return sb.toString();
     }
 }

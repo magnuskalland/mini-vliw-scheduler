@@ -38,6 +38,7 @@ public class Scheduler {
         System.out.printf("%s\n", sched);
 
         sched.allocateRegisters();
+        sched.prepareLoop();
 
         return sched;
     }

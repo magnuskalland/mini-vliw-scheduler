@@ -30,6 +30,11 @@ public class SequentialSchedule extends Schedule {
         return bundle.insertIntoSlot(instruction);
     }
 
+    @Override
+    public void prepareLoop() {
+        return;
+    }
+
 
     protected void insertInterloopMov(Mov mov) {
         int lowerBound = computeInterloopDependencyResolutionLowerBoundSlot(mov);
@@ -58,7 +63,7 @@ public class SequentialSchedule extends Schedule {
     public void allocateRegisters() {
         allocateFresh();
         System.out.printf("Allocated fresh produced registers:\n%s\n", this);
-        mapConsumed();
+        mapConsumed(bundles);
         System.out.printf("Mapped consumed registers:\n%s\n", this);
         if (containsLoop()) {
             handleInterloopDependencies();
@@ -76,37 +81,6 @@ public class SequentialSchedule extends Schedule {
                 }));
     }
 
-    private void mapConsumed() {
-        bundles.forEach(b ->
-                b.getBundle().stream()
-                        .filter(i -> i.isTrueConsumer() && !dependencyMatrix.get(i.getAddress()).getAll().isEmpty())
-                        .forEach(c -> {
-
-                            if (dependencyMatrix.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((Consumer) c).getOperandA())) {
-                                Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
-                                ((Consumer) c).setOperandA(producer.getMappedDestination());
-                            }
-
-                            if (!(c instanceof DoubleConsumer))
-                                return;
-
-                            if (dependencyMatrix.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((DoubleConsumer) c).getOperandB())) {
-                                Producer producer = getMostRecentProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
-                                ((DoubleConsumer) c).setOperandB(producer.getMappedDestination());
-                            }
-                        }));
-    }
-
-    private Producer getMostRecentProducer(int consumerAddress, int register) {
-        ArrayList<Producer> producers = dependencyMatrix.get(consumerAddress).getAll().stream()
-                .filter(p -> p.getDestination() == register)
-                .sorted(Comparator.comparingInt(p -> {
-                    int diff = consumerAddress - p.getAddress();
-                    return diff <= 0 ? Integer.MAX_VALUE : diff;
-                }))
-                .collect(Collectors.toCollection(ArrayList::new));
-        return producers.get(0);
-    }
 
     private void handleInterloopDependencies() {
         ArrayList<Mov> movs = new ArrayList<>();
@@ -133,23 +107,5 @@ public class SequentialSchedule extends Schedule {
         if (c.getOperandA() == p.getDestination())
             return c.getMappedOperandA();
         return ((DoubleConsumer) c).getMappedOperandB();
-    }
-
-    private void allocateEarlierReaders() {
-        bundles.forEach(b ->
-                b.getBundle().stream()
-                        .filter(Instruction::isTrueConsumer)
-                        .forEach(i -> {
-                            if (!((Consumer)i).isOperandARemapped()) {
-                                ((Consumer) i).setOperandA(Microarchitecture.getFreshSimpleRegister());
-                            }
-                            if (!(i instanceof DoubleConsumer))
-                                return;
-
-                            if (!((DoubleConsumer)i).isOperandBRemapped()) {
-                                ((DoubleConsumer) i).setOperandB(Microarchitecture.getFreshSimpleRegister());
-                            }
-                        })
-        );
     }
 }
