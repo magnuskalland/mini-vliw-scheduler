@@ -1,126 +1,105 @@
 import Instructions.*;
-import Microarchitecture.Microarchitecture;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class Scheduler {
-    private Instruction loopStart, loopEnd;
-    int initiationInterval, loopStages;
-    ArrayList<Instruction> program;
+    private final ArrayList<Instruction> program;
+    private final Instruction loopStart, loopEnd;
 
-    public static Schedule schedule(ArrayList<Instruction> instructions, boolean pipelined) {
-        Scheduler scheduler = new Scheduler();
-        Schedule schedule;
-        ArrayList<InstructionDependency> dependencies;
+    public static Schedule schedule(ArrayList<Instruction> program, boolean pipelined) {
+        Instruction loopStart, loopEnd;
+        ArrayList<InstructionDependency> deps;
+        Schedule sched;
+        Scheduler scheduler;
 
-        scheduler.program = instructions;
-        scheduler.defineBasicBlocks();
-        scheduler.initiationInterval = scheduler.computeInitiationIntervalLowerBound();
-        System.out.printf("%s\n", scheduler.getInitialProgram());
+        scheduler = new Scheduler(program);
+        loopStart = scheduler.getLoopStart();
+        loopEnd = scheduler.getLoopEnd();
 
-        while (true) {
-            dependencies = DependencyAnalyzer.analyze(instructions, scheduler.getLoopStartAddress(), scheduler.getLoopEndAddress(),
-                    scheduler.getBasicBlockZeroProducers(),
-                    scheduler.getBasicBlockOneProducers(),
-                    scheduler.getBasicBlockTwoProducers());
+        deps = DependencyAnalyzer.analyze(program,
+                scheduler.getInitialLoopStartAddress(),
+                scheduler.getInitialLoopEndAddress(),
+                scheduler.getBasicBlockZeroProducers(),
+                scheduler.getBasicBlockOneProducers(),
+                scheduler.getBasicBlockTwoProducers());
 
-            if (pipelined) {
-                schedule = scheduler.schedulePipelined(instructions, dependencies);
-                break;
-            }
+        sched = pipelined ?
+                new PipelinedSchedule(loopStart, loopEnd, program, deps) :
+                new SequentialSchedule(loopStart, loopEnd, program, deps);
 
-            schedule = scheduler.scheduleSequential(instructions, dependencies);
-            RegisterAllocator.allocate(instructions, schedule, dependencies);
-            break;
-        }
-        return schedule;
+        System.out.printf("%s\n", scheduler.getInitialProgram(sched));
+
+        for (Instruction i : program)
+            sched.scheduleInstruction(i);
+
+        System.out.println("\nInitial schedule:");
+        System.out.printf("%s\n", sched);
+
+        sched.allocateRegisters();
+
+        return sched;
     }
 
-    public Schedule schedulePipelined(ArrayList<Instruction> program, ArrayList<InstructionDependency> dependencies) {
-        Schedule schedule = new PipelinedSchedule(program, loopStart, loopEnd, initiationInterval);
-        for (Instruction i : getBasicBlockZero()) {
-            schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
-        }
-        return schedule;
+    private Scheduler(ArrayList<Instruction> program) {
+        this.program = program;
+        this.loopStart = defineLoopStart(program);
+        this.loopEnd = defineLoopEnd(program);
     }
 
-    public Schedule scheduleSequential(ArrayList<Instruction> program, ArrayList<InstructionDependency> dependencies) {
-        Schedule schedule = new SequentialSchedule(program, loopStart, loopEnd, initiationInterval);
-
-        for (Instruction i : program) {
-            schedule.insert(i, dependencies.get(i.getAddress()), initiationInterval);
-        }
-
-        System.out.println("Initial schedule:");
-        System.out.printf("%s\n", schedule);
-        return schedule;
+    private Instruction getLoopStart() {
+        return loopStart;
     }
 
-    private int computeInitiationIntervalLowerBound() {
-        int[] counts = new int[Microarchitecture.PIPELINE_WIDTH];
-        program.subList(getLoopStartAddress(), getLoopEndAddress())
-                .forEach(i -> counts[i.getPipelineSlots()[0]]++);
-        counts[0] = (int) Math.ceil((double) counts[0] / Microarchitecture.ALU_UNITS);
-        return Arrays.stream(counts).max().getAsInt();
+    private Instruction getLoopEnd() {
+        return loopEnd;
     }
 
-    private void defineBasicBlocks() {
+    private Instruction defineLoopStart(ArrayList<Instruction> program) {
         Branch branch = (Branch) program.stream()
                 .filter(instruction -> instruction instanceof Branch)
                 .findFirst().orElse(null);
-        loopStart = branch == null ? null : program.get(branch.getTarget());
+        return branch == null ? null : program.get(branch.getTarget());
+    }
+
+    private Instruction defineLoopEnd(ArrayList<Instruction> program) {
+        Branch branch = (Branch) program.stream()
+                .filter(instruction -> instruction instanceof Branch)
+                .findFirst().orElse(null);
         try {
-            loopEnd = branch == null ? null : program.get(branch.getAddress() + 1);
+            return branch == null ? null : program.get(branch.getAddress() + 1);
         } catch (IndexOutOfBoundsException e) {
-            loopEnd = null;
+            return null;
         }
-        System.out.printf("Loop start is %s and end is %s\n", loopStart, loopEnd);
     }
 
-    private boolean verifyInterloopDependencyInvariant(ArrayList<InstructionDependency> dependencies) {
-        for (Instruction i : program) {
-            for (Instruction d : dependencies.get(i.getAddress()).getInterloopDependencies()) {
-                if (!interloopDependencyInvariant(d, i, initiationInterval)) {
-                    System.out.printf("Invariant failed for %d %s --> %d %s\n", i.getScheduledAddress(), i, d.getScheduledAddress(), d);
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    private boolean interloopDependencyInvariant(Instruction p, Instruction c, int initiationInterval) {
-        return p.getScheduledAddress() + p.getLatency() <= c.getScheduledAddress() + initiationInterval;
-    }
-
-    private String getInitialProgram() {
+    private String getInitialProgram(Schedule sched) {
         AtomicInteger i = new AtomicInteger(0);
         String programString = program.stream()
                 .map(instr -> {
                     int index = i.getAndIncrement();
-                    return (index == getLoopStartAddress() ? "BB1:" : "") +
-                            (index == getLoopEndAddress() ? "BB2:" : "") +
+                    return (index == getInitialLoopStartAddress() ? "BB1:" : "") +
+                            (index == getInitialLoopEndAddress() ? "BB2:" : "") +
                             String.format("\t0x%x: %s\n", index, instr);
                 })
                 .collect(Collectors.joining());
-
-        return "BB0:" + programString + String.format("Initial II: %d\n", computeInitiationIntervalLowerBound());
+        return "BB0:" + programString + String.format("Initial II: %d\n", sched.getInitiationInterval());
     }
+
     private ArrayList<Instruction> getBasicBlockZero() {
-        return program.stream().filter(i -> i.getAddress() < getLoopStartAddress())
+        return program.stream().filter(i -> i.getAddress() < getInitialLoopStartAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private ArrayList<Instruction> getBasicBlockOne() {
-        return program.stream().filter(i -> i.getAddress() >= getLoopStartAddress() &&
-                    i.getAddress() < getLoopEndAddress())
+        return program.stream().filter(i -> i.getAddress() >= getInitialLoopStartAddress() &&
+                    i.getAddress() < getInitialLoopEndAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
     private ArrayList<Instruction> getBasicBlockTwo() {
-        return program.stream().filter(i -> i.getAddress() >= getLoopEndAddress())
+        return program.stream().filter(i -> i.getAddress() >= getInitialLoopEndAddress())
                 .collect(Collectors.toCollection(ArrayList::new));
     }
 
@@ -143,11 +122,11 @@ public class Scheduler {
         return getProducersFromBasicBlock(getBasicBlockTwo());
     }
 
-    private int getLoopStartAddress() {
+    private int getInitialLoopStartAddress() {
         return loopStart == null ? program.size() : loopStart.getAddress();
     }
 
-    private int getLoopEndAddress() {
+    private int getInitialLoopEndAddress() {
         return loopEnd == null ? program.size() : loopEnd.getAddress();
     }
 }

@@ -18,8 +18,8 @@ public class Main {
         String input = args[0], simpleOutput = args[1], pipOutput = args[2];
         ArrayList<Instruction> instructions = IO.parseInstructions(input);
 
-        Schedule simple = Scheduler.schedule(instructions, false);
-        IO.dump(simple, simpleOutput);
+//        Schedule simple = Scheduler.schedule(instructions, false);
+//        IO.dump(simple, simpleOutput);
 
         Schedule pipelined = Scheduler.schedule(instructions, true);
         IO.dump(pipelined, pipOutput);

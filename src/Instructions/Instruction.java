@@ -3,6 +3,7 @@ package Instructions;
 public abstract class Instruction {
     private final int address;
     private int scheduledAddress;
+    private int scheduledSlot;
     Instruction(int address) {
         this.address = address;
         this.scheduledAddress = address;
@@ -17,6 +18,12 @@ public abstract class Instruction {
         this.scheduledAddress = address;
     }
     public abstract int[] getPipelineSlots();
+    public int getScheduledSlot() {
+        return scheduledSlot;
+    }
+    public void setScheduledSlot(int slot) {
+        scheduledSlot = slot;
+    }
     public abstract String toString();
     public abstract int getLatency();
     public boolean isTrueConsumer() {

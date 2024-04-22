@@ -4,19 +4,14 @@ import Microarchitecture.Microarchitecture;
 
 public class Nop extends Instruction {
     private boolean reserved = false;
-    private final int slotIndex;
-    public Nop(int address, int slotIndex) {
+    public Nop(int address) {
         super(address);
-        this.slotIndex = slotIndex;
     }
     public boolean isReserved() {
         return reserved;
     }
-    public void setReserved() {
+    public void markReserved() {
         reserved = true;
-    }
-    public int getSlotIndex() {
-        return slotIndex;
     }
     @Override
     public int getLatency() {
@@ -28,6 +23,6 @@ public class Nop extends Instruction {
     }
     @Override
     public String toString() {
-        return " nop";
+        return reserved ? " --- " : " nop";
     }
 }

@@ -47,7 +47,7 @@ public class IO {
 
         for (Bundle b : schedule.get()) {
             ArrayList<String> list = new ArrayList<>();
-            for (Instruction i : b.get())
+            for (Instruction i : b.getBundle())
                 list.add(i.toString());
             sb.append(gson.toJson(list)).append(",\n\t");
         }
@@ -107,7 +107,7 @@ public class IO {
                     new Mulu(index, Integer.parseInt(vec[1]), Integer.parseInt(vec[2]), Integer.parseInt(vec[3]));
             case "loop" -> new Loop(index, Integer.parseInt(vec[1]));
             case "loop.pip" -> new LoopPip(index, Integer.parseInt(vec[1]));
-            case "nop" -> new Nop(index, -1);
+            case "nop" -> new Nop(index);
             default ->
                 throw new Exception(String.format("Parsing instruction '%s' not implemented", vec[1]));
         };
