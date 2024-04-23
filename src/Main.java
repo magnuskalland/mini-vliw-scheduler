@@ -1,4 +1,5 @@
 import Instructions.Instruction;
+import Microarchitecture.Microarchitecture;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,12 +17,13 @@ public class Main {
         }
 
         String input = args[0], simpleOutput = args[1], pipOutput = args[2];
-        ArrayList<Instruction> instructions = IO.parseInstructions(input);
 
-//        Schedule simple = Scheduler.schedule(instructions, false);
-//        IO.dump(simple, simpleOutput);
+        Schedule simple = Scheduler.schedule(IO.parseInstructions(input), false);
+        IO.dump(simple, simpleOutput);
 
-        Schedule pipelined = Scheduler.schedule(instructions, true);
+        Microarchitecture.reset();
+
+        Schedule pipelined = Scheduler.schedule(IO.parseInstructions(input), true);
         IO.dump(pipelined, pipOutput);
     }
 }

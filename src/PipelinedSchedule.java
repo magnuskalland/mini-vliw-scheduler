@@ -1,10 +1,10 @@
 import Instructions.*;
 import Microarchitecture.Microarchitecture;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 public class PipelinedSchedule extends Schedule {
     private int numberOfLoopStages;
@@ -13,7 +13,7 @@ public class PipelinedSchedule extends Schedule {
                              ArrayList<Instruction> program,
                              ArrayList<InstructionDependency> deps) {
         super(loopStart, loopEnd, program, deps);
-        collapsed = true;
+        collapsed = false;
     }
 
     @Override
@@ -34,7 +34,7 @@ public class PipelinedSchedule extends Schedule {
         Bundle bundle;
         boolean ok;
 
-        System.out.printf("Attempting to insert %d%s at %d\n", instruction.getAddress(), instruction, index);
+//        System.out.printf("Attempting to insert %d%s at %d\n", instruction.getAddress(), instruction, index);
 
         if (inLoop(instruction) && index >= bundles.size()) {
             addLoopStage();
@@ -50,12 +50,14 @@ public class PipelinedSchedule extends Schedule {
         if (!ok)
             return false;
 
-        if (!collapsed)
-            markReserved(instruction);
+        markReserved(instruction);
         return true;
     }
 
     private void markReserved(Instruction instruction) {
+        if (collapsed)
+            return;
+
         if (!inLoop(instruction))
             return;
 
@@ -71,23 +73,12 @@ public class PipelinedSchedule extends Schedule {
     private Instruction getNextToReserve(Instruction c) {
         int next = c.getScheduledAddress() + initiationInterval;
 
-        if (next >= getLoopEndScheduledAddress()) {
+        if (next >= (loopEndAdded ? getLoopEndScheduledAddress() : bundles.size())) {
             int lStart = getLoopStartAddress();
-            next = (next - lStart) % (getLoopEndScheduledAddress() - lStart) + lStart;
+            next = (next - lStart) % ((loopEndAdded ? getLoopEndScheduledAddress() : bundles.size()) - lStart) + lStart;
         }
 
         return bundles.get(next).getBundle().get(c.getScheduledSlot());
-    }
-
-    private void reschedule(Instruction end) {
-//        System.out.printf("\n\n --- RESCHEDULING --- \n\n");
-        System.out.printf("\tRescheduling\n");
-        initiationInterval += 1;
-        bundles = new ArrayList<>(bundles.subList(0, getLoopStartAddress()));
-        loopEndAdded = false;
-        program.subList(loopStart.getAddress(), end.getAddress()+1).forEach(this::scheduleInstruction);
-//        System.out.printf("\n\n --- FINISHED RESCHEDULING --- \n\n");
-        System.out.printf("\tFinished rescheduling\n");
     }
 
     private void addLoopStage() {
@@ -100,7 +91,14 @@ public class PipelinedSchedule extends Schedule {
         bundles.subList(getLoopStartAddress(), loopEndAdded ? getLoopEndScheduledAddress() : bundles.size())
                 .forEach(b -> b.getBundle().forEach(i -> {
                     if (!(i instanceof Nop)) markReserved(i);
-        }));
+                }));
+    }
+
+    private void reschedule(Instruction end) {
+        initiationInterval += 1;
+        bundles = new ArrayList<>(bundles.subList(0, getLoopStartAddress()));
+        loopEndAdded = false;
+        program.subList(loopStart.getAddress(), end.getAddress()+1).forEach(this::scheduleInstruction);
     }
 
     private boolean inLoop(Instruction i) {
@@ -131,16 +129,18 @@ public class PipelinedSchedule extends Schedule {
     public void allocateRegisters() {
         numberOfLoopStages = computeNumberOfLoopStages();
         allocateFreshRotatingLoopRegisters();
-        System.out.printf("Allocated fresh produced registers:\n%s\n", this);
+//        System.out.printf("Allocated fresh produced registers:\n%s\n", this);
         allocateLoopInvariantSimpleRegisters();
-        System.out.printf("Allocated loop invariant registers:\n%s\n", this);
+//        System.out.printf("Allocated loop invariant registers:\n%s\n", this);
         mapLoopBodyConsumers();
-        System.out.printf("Mapped loop body consumers:\n%s\n", this);
+//        System.out.printf("Mapped loop body consumers:\n%s\n", this);
         mapRemainingRegisters();
-        System.out.printf("Allocated remaining registers in BB0 and BB2:\n%s\n", this);
+//        System.out.printf("Allocated remaining registers in BB0 and BB2:\n%s\n", this);
     }
 
     private int computeNumberOfLoopStages() {
+        if (initiationInterval == 0)
+            return 0;
         return (getLoopEndScheduledAddress()-getLoopStartAddress())/initiationInterval;
     }
 
@@ -153,10 +153,12 @@ public class PipelinedSchedule extends Schedule {
     }
 
     private void allocateLoopInvariantSimpleRegisters() {
-        dependencyMatrix.forEach(r -> r.getLoopInvariantDependencies().forEach(p -> {
+        ArrayList<Producer> deps = new ArrayList<>();
+        dependencyMatrix.forEach(d -> d.getLoopInvariantDependencies().stream().filter(i -> !deps.contains(i)).forEach(deps::add));
+        deps.forEach(p -> {
             int fresh = Microarchitecture.getFreshSimpleRegister();
             p.setMappedDestination(fresh);
-        }));
+        });
     }
 
     private void mapLoopBodyConsumers() {
@@ -188,16 +190,18 @@ public class PipelinedSchedule extends Schedule {
 
     private void mapRemainingRegisters() {
         resolveBasicBlockZeroInterloopProducers();
-        System.out.printf("Resolved basic block zero interloop producers:\n%s\n", this);
+//        System.out.printf("Resolved basic block zero interloop producers:\n%s\n", this);
         resolveBasicBlockLocalDependencies(new ArrayList<>(bundles.subList(0, getLoopStartAddress())));
         resolveBasicBlockLocalDependencies(new ArrayList<>(bundles.subList(getLoopEndScheduledAddress(), bundles.size())));
-        System.out.printf("Resolved basic block local dependencies:\n%s\n", this);
+//        System.out.printf("Resolved basic block local dependencies:\n%s\n", this);
         resolvePostLoopDependencies();
-        System.out.printf("Resolved post loop dependencies:\n%s\n", this);
+//        System.out.printf("Resolved post loop dependencies:\n%s\n", this);
         resolveBasicBlockInvariants(new ArrayList<>(bundles.subList(0, getLoopStartAddress())));
         resolveBasicBlockInvariants(new ArrayList<>(bundles.subList(getLoopEndScheduledAddress(), bundles.size())));
-        System.out.printf("Resolved basic block invariants:\n%s\n", this);
-        allocateEarlierReaders();
+//        System.out.printf("Resolved basic block invariants:\n%s\n", this);
+//        System.out.printf("Allocated independent instructions:\n%s\n", this);
+        allocateIndependentRegisters();
+        allocatePostLoopIndependentRegisters();
     }
 
     private void matchAndRemapConsumer(Consumer c, int old, int mapped) {
@@ -217,15 +221,15 @@ public class PipelinedSchedule extends Schedule {
     private void resolveBasicBlockZeroInterloopProducers() {
         // BB0 registers that are interloop dependencies
         ArrayList<Producer> interloopDeps = getDistinctInterloopDependencies();
-        System.out.printf("Distinct interloop dependencies: %s\n", interloopDeps.toString());
+//        System.out.printf("Distinct interloop dependencies: %s\n", interloopDeps.toString());
 
         // For each instruction in BB0...
         bundles.subList(0, getLoopStartAddress()).forEach(b ->
                 b.getBundle().stream().filter(i -> i instanceof Producer).forEach(p -> {
-                    System.out.printf("Looking if %d%s is an interloop dependency\n", p.getAddress(), p);
+//                    System.out.printf("Looking if %d%s is an interloop dependency\n", p.getAddress(), p);
                     interloopDeps.stream().filter(i -> i == p).forEach(i -> {
-                        System.out.printf("\tFor %d%s, found our register to be an interloop dependent register\n",
-                                p.getAddress(), p, i.getAddress(), i);
+//                        System.out.printf("\tFor %d%s, found our register to be an interloop dependent register\n",
+//                                p.getAddress(), p, i.getAddress(), i);
 
                         // ... that is also produced in the loop
                         Optional<Producer> opt = getLoopProducers().stream()
@@ -237,8 +241,8 @@ public class PipelinedSchedule extends Schedule {
 
                         int loopStage = getLoopStageOfInstruction(opt.get());
                         int mappedAddress = (opt.get().getMappedDestination() - loopStage) + 1;
-                        System.out.printf("\tFound instruction: %d%s\n", opt.get().getAddress(), opt.get());
-                        System.out.printf("\tSetting mapped register to x%d(%d, %d)\n", opt.get().getMappedDestination(), 1, -loopStage);
+//                        System.out.printf("\tFound instruction: %d%s\n", opt.get().getAddress(), opt.get());
+//                        System.out.printf("\tSetting mapped register to x%d(%d, %d)\n", opt.get().getMappedDestination(), 1, -loopStage);
                         ((Producer)p).setMappedDestination(mappedAddress);
                     });
         }));
@@ -278,7 +282,7 @@ public class PipelinedSchedule extends Schedule {
                             if (((DoubleConsumer)c).getOperandB() == p.getDestination())
                                 ((DoubleConsumer)c).setOperandB(fresh);
 
-                            System.out.printf("Allocated fresh register to %d%s\n", p.getAddress(), p);
+//                            System.out.printf("Allocated fresh register to %d%s\n", p.getAddress(), p);
 
                         })));
     }
@@ -308,6 +312,7 @@ public class PipelinedSchedule extends Schedule {
     private void resolveBasicBlockInvariants(ArrayList<Bundle> bb) {
         bb.forEach(b -> b.getBundle().stream()
                 .filter(i -> i instanceof Consumer).forEach(c -> {
+
                     if (dependencyMatrix.get(c.getAddress()).getLoopInvariantDependencies().stream().anyMatch(d -> d.getDestination() == ((Consumer) c).getOperandA())) {
                         Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
                         ((Consumer) c).setOperandA(producer.getMappedDestination());
@@ -324,14 +329,68 @@ public class PipelinedSchedule extends Schedule {
             ));
     }
 
+    private void allocateIndependentProducers() {
+        ArrayList<Producer> distinct = getDistinctDependencies();
+        bundles.forEach(b -> b.getBundle().stream().filter(i -> (i instanceof Producer)).forEach(p -> {
+            if (!distinct.contains(p) && !((Producer) p).destinationIsRemapped()) {
+                int fresh = Microarchitecture.getFreshSimpleRegister();
+                ((Producer) p).setMappedDestination(fresh);
+            }
+        }));
+    }
+
+    private void allocateIndependentRegisters() {
+        HashSet<Integer> indep = getIndependentRegisters();
+//        System.out.printf("Independent registers: %s\n", indep);
+        bundles.forEach(b -> b.getBundle().stream().filter(i -> (!(i instanceof Nop)))
+                .forEach(i -> {
+//                        System.out.printf("Mapped instruction %d%s to", i.getAddress(), i);
+                        if (!inLoop(i) && i instanceof Producer && indep.contains(((Producer) i).getDestination()))
+                            ((Producer) i).setMappedDestination(Microarchitecture.getFreshSimpleRegister());
+                        if (i.isTrueConsumer() && indep.contains(((Consumer) i).getOperandA()))
+                            ((Consumer) i).setOperandA(Microarchitecture.getFreshSimpleRegister());
+                        if (i instanceof DoubleConsumer && indep.contains(((DoubleConsumer) i).getOperandB()))
+                            ((DoubleConsumer) i).setOperandB(Microarchitecture.getFreshSimpleRegister());
+//                        System.out.printf(" %d%s\n", i.getAddress(), i);
+        }));
+    }
+
+    private HashSet<Integer> getIndependentRegisters() {
+        HashMap<Integer, Integer> regs = new HashMap<>();
+        BiConsumer<HashMap<Integer, Integer>, Integer> updateMap = (map, key) -> {
+            map.merge(key, 1, Integer::sum);
+        };
+
+        program.forEach(i -> {
+            if (i instanceof Producer)
+                updateMap.accept(regs, ((Producer) i).getDestination());
+            if (i instanceof Consumer)
+                updateMap.accept(regs, ((Consumer) i).getOperandA());
+            if (i instanceof DoubleConsumer)
+                updateMap.accept(regs, ((DoubleConsumer) i).getOperandB());
+        });
+
+        return regs.entrySet().stream()
+                .filter(entry -> entry.getValue() == 1)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    private void allocatePostLoopIndependentRegisters() {
+        bundles.subList(getLoopEndScheduledAddress(), bundles.size()).forEach(b -> b.getBundle().stream()
+                .filter(i -> i instanceof Producer)
+                .forEach(p ->
+                    ((Producer)p).setMappedDestination(Microarchitecture.getFreshSimpleRegister())));
+    }
+
     @Override
     public void prepareLoop() {
         addPredicates();
-        System.out.printf("Added predicates:\n%s\n", this);
+//        System.out.printf("Added predicates:\n%s\n", this);
         collapseLoop();
-        System.out.printf("Collapsed schedule:\n%s\n", this);
+//        System.out.printf("Collapsed schedule:\n%s\n", this);
         insertPrepareInstructions();
-        System.out.printf("Inserted prepare instructions:\n%s\n", this);
+//        System.out.printf("Inserted prepare instructions:\n%s\n", this);
     }
 
     private void insertPrepareInstructions() {
@@ -342,23 +401,20 @@ public class PipelinedSchedule extends Schedule {
     }
 
     private void forceScheduleInstruction(Instruction instruction) {
-        System.out.printf("Forcing schedule instruction %d%s\n", instruction.getAddress(), instruction);
         Bundle b = bundles.get(instruction.getAddress());
         for (int i = 0; i < instruction.getPipelineSlots().length; i++) {
             if (b.getBundle().get(i) instanceof Nop) {
-                System.out.printf("Found free spot in bundle %d slot %d\n", b.getAddress(), i);
                 tryInsertFrom(instruction, b.getAddress(), this::insertionLoop);
                 return;
             }
         }
-        System.out.printf("Found no space for %d%s in bundle %d slots %s\n",
-                instruction.getAddress(), instruction, b.getAddress(), Arrays.toString(instruction.getPipelineSlots()));
         insertBubbleBundle(instruction.getAddress()+1);
         tryInsertFrom(instruction, instruction.getAddress()+1, this::insertionLoop);
     }
 
     public void collapseLoop() {
         collapsed = true;
+//        System.out.printf("Indices to collapse: %d -> %d\n", getLoopStartAddress() + initiationInterval, getLoopEndScheduledAddress());
         bundles.subList(getLoopStartAddress() + initiationInterval, getLoopEndScheduledAddress())
                 .forEach(b -> b.getBundle().stream()
                         .filter(i -> !(i instanceof Nop))

@@ -25,17 +25,17 @@ public class Scheduler {
                 scheduler.getBasicBlockOneProducers(),
                 scheduler.getBasicBlockTwoProducers());
 
-        sched = pipelined ?
+        sched = pipelined && loopStart != null ?
                 new PipelinedSchedule(loopStart, loopEnd, program, deps) :
                 new SequentialSchedule(loopStart, loopEnd, program, deps);
 
-        System.out.printf("%s\n", scheduler.getInitialProgram(sched));
+//        System.out.printf("%s\n", scheduler.getInitialProgram(sched));
 
         for (Instruction i : program)
             sched.scheduleInstruction(i);
 
-        System.out.println("\nInitial schedule:");
-        System.out.printf("%s\n", sched);
+//        System.out.println("\nInitial schedule:");
+//        System.out.printf("%s\n", sched);
 
         sched.allocateRegisters();
         sched.prepareLoop();

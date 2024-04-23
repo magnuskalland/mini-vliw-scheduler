@@ -47,11 +47,11 @@ public class DependencyAnalyzer {
                     dependencyMatrix.get(consumer.getAddress()).addPostLoopDependency(d));
         });
 
-        System.out.printf("     %-30s   %-30s   %-30s   %-30s\n",
-                "Local dependencies", "Interloop dependencies", "Loop invariant", "Post loop dependencies");
-        for (InstructionDependency d : dependencyMatrix)
-            System.out.printf("%s\n", d);
-        System.out.println();
+//        System.out.printf("     %-30s   %-30s   %-30s   %-30s\n",
+//                "Local dependencies", "Interloop dependencies", "Loop invariant", "Post loop dependencies");
+//        for (InstructionDependency d : dependencyMatrix)
+//            System.out.printf("%s\n", d);
+//        System.out.println();
         return dependencyMatrix;
     }
 

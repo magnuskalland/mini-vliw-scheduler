@@ -115,7 +115,7 @@ public abstract class Schedule {
     protected void pushDownLoopEnd() {
         int oldLoopEnd = loopEndAdded ? getLoopEndScheduledAddress() : bundles.size();
         insertBubbleBundle(oldLoopEnd);
-        if (loopEndAdded) loopEnd.setScheduledAddress(oldLoopEnd+1);
+        if (loopEndAdded) loopEnd.setScheduledAddress(oldLoopEnd+1); // TODO: remove?
     }
 
     private int computeInitiationIntervalLowerBound() {
@@ -175,11 +175,19 @@ public abstract class Schedule {
     protected ArrayList<Producer> getDistinctInterloopDependencies() {
         ArrayList<Producer> interloopDeps = new ArrayList<>();
         dependencyMatrix
-                .subList(loopStart.getAddress(), getLoopEndScheduledAddress())
+                .subList(getInitialLoopStartAddress(), getInitialLoopEndAddress())
                 .forEach(d -> d.getInterloopDependencies().stream()
                         .filter(p -> p.getScheduledAddress() < getLoopStartAddress())
                         .forEach(interloopDeps::add));
         return interloopDeps.stream().collect(Collectors.collectingAndThen(
+                Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Instruction::toString))),
+                ArrayList::new));
+    }
+
+    protected ArrayList<Producer> getDistinctDependencies() {
+        ArrayList<Producer> producers = new ArrayList<>();
+        dependencyMatrix.forEach(d -> producers.addAll(d.getInterloopDependencies()));
+        return producers.stream().collect(Collectors.collectingAndThen(
                 Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(Instruction::toString))),
                 ArrayList::new));
     }

@@ -62,15 +62,15 @@ public class SequentialSchedule extends Schedule {
     @Override
     public void allocateRegisters() {
         allocateFresh();
-        System.out.printf("Allocated fresh produced registers:\n%s\n", this);
+//        System.out.printf("Allocated fresh produced registers:\n%s\n", this);
         mapConsumed(bundles);
-        System.out.printf("Mapped consumed registers:\n%s\n", this);
+//        System.out.printf("Mapped consumed registers:\n%s\n", this);
         if (containsLoop()) {
             handleInterloopDependencies();
-            System.out.printf("Handled interloop dependencies:\n%s\n", this);
+//            System.out.printf("Handled interloop dependencies:\n%s\n", this);
         }
         allocateEarlierReaders();
-        System.out.printf("Handled earlier readers:\n%s\n", this);
+//        System.out.printf("Handled earlier readers:\n%s\n", this);
     }
 
     private void allocateFresh() {
