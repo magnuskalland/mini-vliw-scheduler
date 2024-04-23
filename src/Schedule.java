@@ -72,7 +72,7 @@ public abstract class Schedule {
         return loopStart == null ? bundles.size(): loopStart.getScheduledAddress();
     }
 
-    protected int getLoopEndAddress() {
+    protected int getLoopEndScheduledAddress() {
         return loopEnd == null ? bundles.size() : loopEnd.getScheduledAddress();
     }
 
@@ -113,9 +113,9 @@ public abstract class Schedule {
     }
 
     protected void pushDownLoopEnd() {
-        int oldLoopEnd = loopEndAdded ? getLoopEndAddress() : bundles.size();
+        int oldLoopEnd = loopEndAdded ? getLoopEndScheduledAddress() : bundles.size();
         insertBubbleBundle(oldLoopEnd);
-        loopEnd.setScheduledAddress(oldLoopEnd+1);
+        if (loopEndAdded) loopEnd.setScheduledAddress(oldLoopEnd+1);
     }
 
     private int computeInitiationIntervalLowerBound() {
@@ -132,7 +132,7 @@ public abstract class Schedule {
             for (Instruction i : b.getBundle())
                 if (i instanceof Branch) {
                     b.getBundle().set(loopSlot, new Nop(b.getAddress()));
-                    bundles.get(getLoopEndAddress()-1).insertIntoSlot(i);
+                    bundles.get(getLoopEndScheduledAddress()-1).insertIntoSlot(i);
                     return;
                 }
         assert false;
@@ -143,8 +143,8 @@ public abstract class Schedule {
                 (!containsLoop()) ? 0 :
                         (i == loopStart || i == loopEnd) ? bundles.size() :
                                 (i.getAddress() < getLoopStartAddress()) ? 0 :
-                                        (i.getAddress() <= getLoopEndAddress() || !loopEndAdded) ? getLoopStartAddress() :
-                                                getLoopEndAddress();
+                                        (i.getAddress() <= getLoopEndScheduledAddress() || !loopEndAdded) ? getLoopStartAddress() :
+                                                getLoopEndScheduledAddress();
         int latestDependency = deps.getAll().stream()
                 .filter(d -> i.getAddress() > d.getAddress() &&
                         lowerBound < d.getAddress() + d.getLatency())
@@ -175,7 +175,7 @@ public abstract class Schedule {
     protected ArrayList<Producer> getDistinctInterloopDependencies() {
         ArrayList<Producer> interloopDeps = new ArrayList<>();
         dependencyMatrix
-                .subList(getLoopStartAddress(), getLoopEndAddress())
+                .subList(loopStart.getAddress(), getLoopEndScheduledAddress())
                 .forEach(d -> d.getInterloopDependencies().stream()
                         .filter(p -> p.getScheduledAddress() < getLoopStartAddress())
                         .forEach(interloopDeps::add));
@@ -190,7 +190,8 @@ public abstract class Schedule {
                         .filter(i -> i.isTrueConsumer() && !dependencyMatrix.get(i.getAddress()).getAll().isEmpty())
                         .forEach(c -> {
 
-                            if (dependencyMatrix.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((Consumer) c).getOperandA())) {
+                            if (dependencyMatrix.get(c.getAddress()).getAll().stream()
+                                    .anyMatch(d -> d.getDestination() == ((Consumer) c).getOperandA())) {
                                 Producer producer = getMostRecentProducer(c.getAddress(), ((Consumer) c).getOperandA());
                                 ((Consumer) c).setOperandA(producer.getMappedDestination());
                             }
@@ -198,7 +199,8 @@ public abstract class Schedule {
                             if (!(c instanceof DoubleConsumer))
                                 return;
 
-                            if (dependencyMatrix.get(c.getAddress()).getAll().stream().anyMatch(d -> d.getDestination() == ((DoubleConsumer) c).getOperandB())) {
+                            if (dependencyMatrix.get(c.getAddress()).getAll().stream()
+                                    .anyMatch(d -> d.getDestination() == ((DoubleConsumer) c).getOperandB())) {
                                 Producer producer = getMostRecentProducer(c.getAddress(), ((DoubleConsumer) c).getOperandB());
                                 ((DoubleConsumer) c).setOperandB(producer.getMappedDestination());
                             }

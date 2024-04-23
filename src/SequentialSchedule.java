@@ -22,7 +22,7 @@ public class SequentialSchedule extends Schedule {
             addBundle();
         }
 
-        if (index == getLoopEndAddress()) {
+        if (index == getLoopEndScheduledAddress()) {
             pushDownLoopEnd();
         }
 
@@ -42,8 +42,8 @@ public class SequentialSchedule extends Schedule {
     }
 
     private int computeInterloopDependencyResolutionLowerBoundSlot(Mov mov) {
-        AtomicInteger earliest = new AtomicInteger(getLoopEndAddress() - 1);
-        bundles.subList(getLoopStartAddress(), Math.min(getLoopEndAddress(), bundles.size())).forEach(b ->
+        AtomicInteger earliest = new AtomicInteger(getLoopEndScheduledAddress() - 1);
+        bundles.subList(getLoopStartAddress(), Math.min(getLoopEndScheduledAddress(), bundles.size())).forEach(b ->
                 b.getBundle().forEach(i -> {
                     if (!(i instanceof Producer)) {
                         return;
@@ -90,7 +90,7 @@ public class SequentialSchedule extends Schedule {
                         .forEach(d -> {
                             int dest = getDependencySourceRegister((Consumer)i, d);
                             int cons = d.getMappedDestination();
-                            Mov mov = new Mov(Math.min(bundles.size()-1, getLoopEndAddress()-1), dest, cons);
+                            Mov mov = new Mov(Math.min(bundles.size()-1, getLoopEndScheduledAddress()-1), dest, cons);
                             mov.setOperandA(cons); // mark operand as remapped
                             movs.add(mov);
                         }));
